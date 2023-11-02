@@ -1,0 +1,66 @@
+package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Gyroscope;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+
+public class CustomAutonomousWaypointsOpMode extends LinearOpMode {
+
+    private DcMotor leftOdometry;
+    private DcMotor rightOdometry;
+    private DcMotor strafeOdometry;
+
+    private Gyroscope imu;
+
+    private double wheelRadius = 2.0;  // Set the wheel radius here
+    private double distanceBetweenWheels = 12.0;  // Set the distance between wheels here
+    private double COUNTS_PER_INCH = 1000.0;  // Set the ticks per inch here
+    private double wheelSlippageFactor = 1.0;  // Set the wheel slippage factor here
+
+    private double globalX = 0.0;
+    private double globalY = 0.0;
+    private double heading = 0.0;
+
+    public void resetPosition() {
+        globalX = 0.0;
+        globalY = 0.0;
+    }
+
+    public void updatePosition() {
+        double leftEncoderValue = leftOdometry.getCurrentPosition();
+        double rightEncoderValue = rightOdometry.getCurrentPosition();
+
+        double leftDistance = leftEncoderValue / (COUNTS_PER_INCH * wheelSlippageFactor);
+        double rightDistance = rightEncoderValue / (COUNTS_PER_INCH * wheelSlippageFactor);
+
+        double deltaX = ((leftDistance + rightDistance) / 2) * Math.cos(Math.toRadians(heading));
+        double deltaY = ((leftDistance + rightDistance) / 2) * Math.sin(Math.toRadians(heading));
+
+        globalX += deltaX;
+        globalY += deltaY;
+    }
+
+    @Override
+    public void runOpMode() {
+        leftOdometry = hardwareMap.get(DcMotor.class, "leftOdometry");
+        rightOdometry = hardwareMap.get(DcMotor.class, "rightOdometry");
+        strafeOdometry = hardwareMap.get(DcMotor.class, "strafeOdometry");
+        imu = hardwareMap.get(Gyroscope.class, "imu");
+
+        // Reset the starting position
+        resetPosition();
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+            // Update the robot's position
+            updatePosition();
+
+            // Print the robot's current X and Y positions relative to its starting point
+            telemetry.addData("Global X", globalX);
+            telemetry.addData("Global Y", globalY);
+            telemetry.update();
+        }
+    }
+}

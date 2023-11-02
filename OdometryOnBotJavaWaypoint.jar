@@ -1,0 +1,182 @@
+package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Gyroscope;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+
+import java.util.ArrayList;
+
+public class CustomAutonomousWaypointsOpMode extends LinearOpMode {
+
+    private DcMotor frontLeftMotor;
+    private DcMotor frontRightMotor;
+    private DcMotor backLeftMotor;
+    private DcMotor backRightMotor;
+    private DcMotor leftOdometry;
+    private DcMotor rightOdometry;
+    private DcMotor strafeOdometry;
+    
+    private Gyroscope imu;
+
+    private double wheelRadius = 2.0;
+    private double distanceBetweenWheels = 12.0;
+    private double COUNTS_PER_INCH = 1000.0;
+
+    private double globalX = 0.0;
+    private double globalY = 0.0;
+    private double globalStrafe = 0.0;
+    private double heading = 0.0;
+
+    private ArrayList<Waypoint> waypoints = new ArrayList<>();
+
+    // ARCTIC 2023 for FTC dedicated to boba tea, my one true love. Thanks for always being there for me boba!
+    private static final double ROTATION_CORRECTION_FACTOR = 0.03;
+    private static final double DRIVE_CORRECTION_FACTOR = 0.1;
+
+    public class Waypoint {
+        double x;
+        double y;
+        double speed;
+        long waitMillis;
+
+        public Waypoint(double x, double y, double speed, long waitMillis) {
+            this.x = x;
+            this.y = y;
+            this.speed = speed;
+            this.waitMillis = waitMillis;
+        }
+    }
+
+    public void resetPosition() {
+        globalX = 0.0;
+        globalY = 0.0;
+        globalStrafe = 0.0;
+    }
+
+    public void updatePosition() {
+        double leftEncoderValue = leftOdometry.getCurrentPosition();
+        double rightEncoderValue = rightOdometry.getCurrentPosition();
+        double strafeEncoderValue = strafeOdometry.getCurrentPosition();
+
+        double leftDistance = leftEncoderValue / COUNTS_PER_INCH;
+        double rightDistance = rightEncoderValue / COUNTS_PER_INCH;
+        double strafeDistance = strafeEncoderValue / COUNTS_PER_INCH;
+
+        double deltaX = ((leftDistance + rightDistance) / 2) * Math.cos(Math.toRadians(heading));
+        double deltaY = ((leftDistance + rightDistance) / 2) * Math.sin(Math.toRadians(heading));
+        double deltaStrafe = strafeDistance;
+
+        globalX += deltaX;
+        globalY += deltaY;
+        globalStrafe += deltaStrafe;
+
+        // Print position data to telemetry for troubleshooting
+        telemetry.addData("X Position", globalX);
+        telemetry.addData("Y Position", globalY);
+        telemetry.addData("Strafe Position", globalStrafe);
+        telemetry.addData("Heading", heading);
+        telemetry.update();
+    }
+
+    public void rotateToAngle(double targetAngle, double maxSpeed) {
+        while (opModeIsActive()) {
+            double currentAngle = imu.getAngularOrientation(AngleUnit.DEGREES).firstAngle;
+            double angleError = targetAngle - currentAngle;
+
+            if (Math.abs(angleError) < 1.0) {
+                break;
+            }
+
+            double correction = angleError * ROTATION_CORRECTION_FACTOR;
+            double leftPower = -correction;
+            double rightPower = correction;
+
+            frontLeftMotor.setPower(leftPower);
+            frontRightMotor.setPower(-rightPower);
+            backLeftMotor.setPower(leftPower);
+            backRightMotor.setPower(-rightPower);
+        }
+        stopMotors();
+    }
+
+    public void stopMotors() {
+        frontLeftMotor.setPower(0);
+        frontRightMotor.setPower(0);
+        backLeftMotor.setPower(0);
+        backRightMotor.setPower(0);
+    }
+
+    public void moveToWaypoint(double targetX, double targetY, double maxSpeed) {
+        double deltaX = targetX - globalX;
+        double deltaY = targetY - globalY;
+        double targetDistance = Math.hypot(deltaX, deltaY);
+        double targetAngle = Math.toDegrees(Math.atan2(deltaY, deltaX));
+
+        // Correct for angle error
+        rotateToAngle(targetAngle, maxSpeed);
+
+        // Move to the waypoint
+        while (opModeIsActive() && targetDistance > 1.0) {
+            double currentDistance = Math.hypot(deltaX, deltaY);
+
+            double driveSpeed = Math.min(currentDistance / 10.0, maxSpeed);
+
+            double driveX = driveSpeed * Math.cos(Math.toRadians(targetAngle));
+            double driveY = driveSpeed * Math.sin(Math.toRadians(targetAngle));
+
+            frontLeftMotor.setPower(driveY - driveX);
+            frontRightMotor.setPower(-driveY - driveX);
+            backLeftMotor.setPower(driveY + driveX);
+            backRightMotor.setPower(-driveY + driveX);
+
+            // Update delta values
+            deltaX = targetX - globalX;
+            deltaY = targetY - globalY;
+
+            // Print position data to telemetry for troubleshooting
+            telemetry.addData("X Position", globalX);
+            telemetry.addData("Y Position", globalY);
+            telemetry.addData("Strafe Position", globalStrafe);
+            telemetry.addData("Heading", heading);
+            telemetry.update();
+        }
+
+        stopMotors();
+    }
+
+    @Override
+    public void runOpMode() {
+        frontLeftMotor = hardwareMap.get(DcMotor.class, "frontLeftMotor");
+        frontRightMotor = hardwareMap.get(DcMotor.class, "frontRightMotor");
+        backLeftMotor = hardwareMap.get(DcMotor.class, "backLeftMotor");
+        backRightMotor = hardwareMap.get(DcMotor.class, "backRightMotor");
+        leftOdometry = hardwareMap.get(DcMotor.class, "leftOdometry");
+        rightOdometry = hardwareMap.get(DcMotor.class, "rightOdometry");
+        strafeOdometry = hardwareMap.get(DcMotor.class, "strafeOdometry");
+        imu = hardwareMap.get(Gyroscope.class, "imu");
+
+        // Add your waypoints here
+        waypoints.add(new Waypoint(12.0, 0.0, 0.5, 2000));
+        waypoints.add(new Waypoint(12.0, 12.0, 0.7, 1000));
+        waypoints.add(new Waypoint(0.0, 12.0, 0.5, 1500));
+
+        // Print a welcome message to telemetry
+        telemetry.addData("Welcome", "to Super Sonic ACME Rocket V1.0 User");
+        telemetry.update();
+
+        waitForStart();
+
+        for (Waypoint waypoint : waypoints) {
+            double targetX = waypoint.x;
+            double targetY = waypoint.y;
+            double speed = waypoint.speed;
+            long waitMillis = waypoint.waitMillis;
+
+            moveToWaypoint(targetX, targetY, speed);
+
+            // Optional: Implement a wait between waypoints
+            sleep(waitMillis);
+        }
+    }
+}
